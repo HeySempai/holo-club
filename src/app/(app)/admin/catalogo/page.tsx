@@ -61,9 +61,17 @@ export default async function Catalogo() {
                 {sets?.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
             </Field>
-            <Field label="Opción A · ID del set en Pokémon TCG API" hint="Trae nombres, rarezas e imágenes automáticamente.">
-              <input name="api_set_id" placeholder="ej. sv8pt5" className={inputCls} />
-            </Field>
+            <div className="grid grid-cols-[auto_1fr] gap-3">
+              <Field label="Fuente">
+                <select name="source" defaultValue="tcgdex" className={inputCls}>
+                  <option value="tcgdex">TCGdex (gratis)</option>
+                  <option value="pokemontcg">pokemontcg.io</option>
+                </select>
+              </Field>
+              <Field label="Opción A · ID del set" hint="Trae nombres, rarezas e imágenes. Ej. TCGdex: me05 · pokemontcg.io: me5">
+                <input name="api_set_id" placeholder="me05" className={inputCls} />
+              </Field>
+            </div>
             <Field label="Opción B · Pegar lista (si dejas vacía la opción A)" hint="Una carta por línea: número,nombre,rareza,url_imagen (la imagen es opcional)">
               <textarea name="csv" rows={6} placeholder={"001,Bulbasaur,Common\n215,Mega Darkrai ex,Special Illustration Rare"} className={`${inputCls} py-3 font-mono text-sm`} />
             </Field>

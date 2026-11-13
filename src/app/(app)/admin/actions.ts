@@ -37,8 +37,35 @@ function parseCsv(text: string): ImportCard[] {
     .filter((l) => l && !/^number\s*,/i.test(l))
     .map((l) => {
       const [number, name, rarity, image_url] = l.split(",").map((x) => x?.trim());
-      return { number, name, rarity: rarity || null, image_url: image_url || null };
+      return { number, name, rarity: rarity ? titleCase(rarity) : null, image_url: image_url || null };
     });
+}
+
+const titleCase = (r: string) => r.replace(/\b\w/g, (c) => c.toUpperCase());
+
+// TCGdex: free, no key, open source, usually lists new sets within days of release.
+async function fetchTcgdex(setId: string): Promise<ImportCard[]> {
+  const base = "https://api.tcgdex.net/v2/en";
+  const res = await fetch(`${base}/sets/${encodeURIComponent(setId)}`, { cache: "no-store" });
+  if (!res.ok) throw new Error(res.status === 404 ? `TCGdex no tiene el set "${setId}"` : `TCGdex respondió ${res.status}`);
+  const set = (await res.json()) as { cards?: { id: string; localId: string; name: string; image?: string }[] };
+  const list = set.cards ?? [];
+  const out: ImportCard[] = new Array(list.length);
+  let i = 0;
+  // The set listing has no rarity, so fetch each card (8 at a time).
+  await Promise.all(
+    Array.from({ length: 8 }, async () => {
+      while (i < list.length) {
+        const idx = i++;
+        const c = list[idx];
+        let rarity: string | null = null;
+        const r = await fetch(`${base}/cards/${encodeURIComponent(c.id)}`, { cache: "no-store" });
+        if (r.ok) rarity = ((await r.json()) as { rarity?: string }).rarity ?? null;
+        out[idx] = { id: c.id, number: c.localId, name: c.name, rarity: rarity ? titleCase(rarity) : null, image_url: c.image ? `${c.image}/low.webp` : null };
+      }
+    }),
+  );
+  return out;
 }
 
 async function fetchPokemonTcg(apiSetId: string): Promise<ImportCard[]> {
@@ -61,7 +88,8 @@ export async function importCards(_p: S, f: FormData): Promise<S> {
   let cards: ImportCard[] = [];
   try {
     const apiId = str(f, "api_set_id");
-    cards = apiId ? await fetchPokemonTcg(apiId) : parseCsv(str(f, "csv"));
+    const source = str(f, "source") || "tcgdex";
+    cards = apiId ? await (source === "pokemontcg" ? fetchPokemonTcg(apiId) : fetchTcgdex(apiId)) : parseCsv(str(f, "csv"));
   } catch (e) {
     return { status: "error", message: `No se pudo leer el catálogo: ${(e as Error).message}` };
   }
