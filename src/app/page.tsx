@@ -62,6 +62,8 @@ export default async function Home() {
           <a href="#como" className="text-mist hover:text-white">Cómo funciona</a>
           <a href="#plan" className="text-mist hover:text-white">Plan</a>
           <a href="#fundadores" className="text-mist hover:text-white">Fundadores</a>
+          <Link href="/muro" className="text-mist hover:text-white">Muro</Link>
+          <Link href="/cuenta" className="text-mist hover:text-white">Mi cuenta</Link>
           <a href="#fundadores" className="btn inline-flex min-h-11 items-center rounded-full bg-cyan px-5 font-semibold text-ink">Unirme</a>
         </nav>
       </header>
