@@ -1,5 +1,5 @@
 import Link from "next/link";
-import HoloPack from "@/components/HoloPack";
+import LandingDemo from "@/components/LandingDemo";
 import WaitlistForm from "@/components/WaitlistForm";
 import { getSupabase } from "@/lib/supabase";
 
@@ -12,6 +12,15 @@ async function getWaitlistCount(): Promise<number | null> {
   if (!supabase) return null;
   const { data, error } = await supabase.rpc("waitlist_count");
   return error ? null : Number(data);
+}
+
+type Pull = { alias: string; set_name: string; hits: { name: string; rarity: string | null; image_url: string | null }[] };
+
+async function getRecentHits(): Promise<Pull[]> {
+  const supabase = getSupabase();
+  if (!supabase) return [];
+  const { data } = await supabase.rpc("wall_feed", { p_limit: 30 });
+  return ((data ?? []) as Pull[]).filter((e) => e.hits?.length).slice(0, 8);
 }
 
 function Check() {
@@ -47,7 +56,7 @@ const FAQ = [
 ];
 
 export default async function Home() {
-  const count = await getWaitlistCount();
+  const [count, recent] = await Promise.all([getWaitlistCount(), getRecentHits()]);
   const subscribeUrl = process.env.NEXT_PUBLIC_MP_SUBSCRIPTION_URL;
   const spotsLeft = count === null ? null : Math.max(FOUNDER_SPOTS - count, 0);
 
@@ -62,6 +71,7 @@ export default async function Home() {
           <a href="#como" className="text-mist hover:text-white">Cómo funciona</a>
           <a href="#plan" className="text-mist hover:text-white">Plan</a>
           <a href="#fundadores" className="text-mist hover:text-white">Fundadores</a>
+          <Link href="/colecciones" className="text-mist hover:text-white">Colecciones</Link>
           <Link href="/muro" className="text-mist hover:text-white">Muro</Link>
           <Link href="/cuenta" className="text-mist hover:text-white">Mi cuenta</Link>
           <a href="#fundadores" className="btn inline-flex min-h-11 items-center rounded-full bg-cyan px-5 font-semibold text-ink">Unirme</a>
@@ -88,7 +98,7 @@ export default async function Home() {
             </div>
           </div>
           <div className="flex min-w-0 flex-[1_1_420px] justify-center">
-            <HoloPack />
+            <LandingDemo />
           </div>
         </section>
 
@@ -107,6 +117,26 @@ export default async function Home() {
           </div>
           <p className="mx-auto max-w-[1200px] px-6 pb-6 text-xs text-dim">Precios observados en México en noviembre de 2026; pueden cambiar.</p>
         </section>
+
+        {recent.length > 0 && (
+          <section aria-label="Últimos hits del club" className="mx-auto flex max-w-[1200px] flex-col gap-4 px-6 pt-16">
+            <div className="flex flex-wrap items-baseline justify-between gap-3">
+              <h2 className="m-0 font-display text-2xl font-bold">Lo último que le salió al club</h2>
+              <Link href="/muro" className="text-sm text-cyan">Ver el muro →</Link>
+            </div>
+            <ul className="m-0 flex list-none gap-4 overflow-x-auto p-0 pb-2">
+              {recent.flatMap((e, i) =>
+                e.hits.map((h, j) => (
+                  <li key={`${i}-${j}`} className="hit flex w-[170px] shrink-0 flex-col gap-1 rounded-xl bg-card p-3">
+                    <span className="font-display text-sm font-semibold text-gold">★ {h.name}</span>
+                    <span className="text-xs text-mist">{h.rarity}</span>
+                    <span className="text-xs text-dim">@{e.alias} · {e.set_name}</span>
+                  </li>
+                )),
+              )}
+            </ul>
+          </section>
+        )}
 
         <section id="como" className="mx-auto flex max-w-[1200px] flex-col gap-10 px-6 py-24">
           <div className="flex max-w-[640px] flex-col gap-3">

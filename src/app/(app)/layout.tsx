@@ -12,6 +12,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <div className="mx-auto flex max-w-[1200px] flex-wrap items-center justify-between gap-4 px-6 py-4">
           <Logo />
           <nav aria-label="Principal" className="flex flex-wrap items-center gap-5 text-[15px]">
+            <Link href="/colecciones" className="text-mist hover:text-white">Colecciones</Link>
             <Link href="/muro" className="text-mist hover:text-white">Muro</Link>
             {user ? (
               <>

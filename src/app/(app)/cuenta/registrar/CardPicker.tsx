@@ -4,6 +4,7 @@ import { useActionState, useMemo, useState } from "react";
 import Link from "next/link";
 import { registerPack, type FormState } from "../actions";
 import { Card, Notice, btnCls, btnGhostCls, inputCls } from "@/components/ui";
+import PackReveal from "@/components/PackReveal";
 
 export type PickCard = { id: string; number: string; name: string; rarity: string | null; image_url: string | null; is_hit: boolean };
 
@@ -22,18 +23,29 @@ export default function CardPicker({ code, setName, perPack, maxHits, cards }: {
 
   if (state.status === "ok" && state.data) {
     const d = state.data as { ok: number; review: number; holos: number };
+    const mine = picked.map((id) => byId.get(id)!).filter(Boolean);
     return (
-      <div className="foil rounded-2xl p-[2px]">
-        <div className="flex flex-col gap-3 rounded-[14px] bg-[#12122a] p-6">
-          <span className="font-display text-2xl font-bold">¡Sobre registrado! +{d.holos} Holos</span>
-          <span className="text-mist">
-            {d.ok} cartas registradas{d.review > 0 && ` · ${d.review} en revisión: las confirmamos en unos días`}.
-          </span>
-          <div className="flex flex-wrap gap-3">
-            <Link href="/cuenta" className={btnCls}>Registrar otro</Link>
-            <Link href="/muro" className={btnGhostCls}>Ver el muro</Link>
+      <div className="flex flex-col gap-5">
+        <div className="foil rounded-2xl p-[2px]">
+          <div className="flex flex-col gap-1 rounded-[14px] bg-[#12122a] p-5">
+            <span className="font-display text-2xl font-bold">¡Sobre registrado! +{d.holos} Holos</span>
+            <span className="text-mist">
+              {d.ok} cartas registradas{d.review > 0 && ` · ${d.review} en revisión: las confirmamos en unos días`}. Ahora revive tu apertura 👇
+            </span>
           </div>
         </div>
+        <Card>
+          <PackReveal
+            cards={mine}
+            label={`${code} · ${setName.toUpperCase()}`}
+            footer={
+              <div className="flex flex-wrap gap-3">
+                <Link href="/cuenta" className={btnCls}>Registrar otro</Link>
+                <Link href="/muro" className={btnGhostCls}>Ver el muro</Link>
+              </div>
+            }
+          />
+        </Card>
       </div>
     );
   }
