@@ -93,9 +93,9 @@ export default async function Home() {
         <section aria-label="Comparación de precios" className="border-y border-[#1e1e38] bg-panel">
           <div className="mx-auto grid max-w-[1200px] grid-cols-[repeat(auto-fit,minmax(240px,1fr))] gap-6 px-6 py-10">
             {[
-              { label: "Sobre suelto con revendedores", value: "desde $222", hl: false },
-              { label: "Caja de 36 en marketplace", value: "$4,849", hl: false },
-              { label: "Holo Club, por sobre con envío", value: "$139", hl: true },
+              { label: "Caja de 36 en marketplace, de un jalón", value: "$4,849", hl: false },
+              { label: "Por sobre, comprando esa caja", value: "~$135", hl: false },
+              { label: "Holo Club, por sobre con envío", value: "$130", hl: true },
             ].map((p) => (
               <div key={p.label} className="flex flex-col gap-1.5">
                 <span className="text-sm text-[#a6a6c0]">{p.label}</span>
@@ -139,7 +139,7 @@ export default async function Home() {
                     <span className="rounded-full bg-gold px-3 py-1.5 text-xs font-bold text-ink">ENVÍO INCLUIDO</span>
                   </div>
                   <div className="flex items-baseline gap-2">
-                    <span className="font-display text-[64px] font-bold tracking-[-2px]">$1,390</span>
+                    <span className="font-display text-[64px] font-bold tracking-[-2px]">$1,300</span>
                     <span className="text-[#a6a6c0]">MXN al mes</span>
                   </div>
                   <ul className="m-0 flex list-none flex-col gap-3 p-0 text-[#d8d8e8]">
@@ -188,7 +188,7 @@ export default async function Home() {
             <Eyebrow color="text-pink">
               Socios fundadores · {spotsLeft === null ? `${FOUNDER_SPOTS} lugares` : spotsLeft > 0 ? `quedan ${spotsLeft} de ${FOUNDER_SPOTS}` : "lista de espera"}
             </Eyebrow>
-            <h2 className="glow m-0 font-display text-[clamp(32px,4vw,48px)] leading-tight tracking-tight">Precio congelado y un sobre extra el primer mes</h2>
+            <h2 className="glow m-0 font-display text-[clamp(32px,4vw,48px)] leading-tight tracking-tight">$1,300 congelado y un sobre extra el primer mes</h2>
             <p className="m-0 text-lg leading-relaxed text-mist">Aparta tu lugar. Te avisamos antes de abrir las suscripciones.</p>
             <WaitlistForm />
           </div>
