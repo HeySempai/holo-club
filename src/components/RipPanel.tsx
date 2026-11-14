@@ -127,33 +127,31 @@ export default function RipPanel({
   video?: { webm: string; mp4: string; poster: string } | null;
 }) {
   const [on, setOn] = useState(false);
-  const [playing, setPlaying] = useState(false);
   const vid = useRef<HTMLVideoElement>(null);
 
-  // Same trick as the reference: still poster at rest, video on top that plays once per hover and holds its last frame.
+  // Like the reference: the video starts and ends on the sealed pack (= poster), so it plays once per hover
+  // and simply lands back where it started. Phones have no hover: it loops on its own there.
   useEffect(() => {
     const v = vid.current;
-    if (!v || !video) return;
-    if (on) {
-      if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    if (!v || !video || !on) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    if (v.paused || v.ended) {
       v.currentTime = 0;
-      v.play().then(() => setPlaying(true)).catch(() => {});
-    } else {
-      setPlaying(false);
-      const t = setTimeout(() => {
-        v.pause();
-        v.currentTime = 0;
-      }, 350);
-      return () => clearTimeout(t);
+      v.play().catch(() => {});
     }
   }, [on, video]);
 
   // Touch screens have no hover: play the rip on a loop instead.
   useEffect(() => {
     if (!window.matchMedia("(hover: none)").matches) return;
+    if (video && vid.current && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      vid.current.loop = true;
+      vid.current.play().catch(() => {});
+      return;
+    }
     const t = setInterval(() => setOn((v) => !v), 3400);
     return () => clearInterval(t);
-  }, []);
+  }, [video]);
 
   return (
     <Link
@@ -163,11 +161,11 @@ export default function RipPanel({
       onPointerLeave={(e) => e.pointerType === "mouse" && setOn(false)}
       onFocus={() => setOn(true)}
       onBlur={() => setOn(false)}
-      className="rip group relative isolate block overflow-hidden rounded-[28px] border border-[#2a2d44] bg-[#1a1b2a] text-white no-underline outline-none focus-visible:ring-2 focus-visible:ring-b2"
+      className="rip group relative isolate block overflow-hidden rounded-[28px] border border-[#2a2d44] bg-[#1b1b2b] text-white no-underline outline-none focus-visible:ring-2 focus-visible:ring-b2"
     >
-      <div className="rip-bg absolute inset-0 -z-10" aria-hidden="true" />
+      {!video && <div className="rip-bg absolute inset-0 -z-10" aria-hidden="true" />}
       {BG_PACKS.map((p, i) => (
-        <div key={i} className={`bg-pack absolute ${p.c} ${video ? "sm:hidden" : ""}`} style={{ "--d": p.d } as React.CSSProperties} aria-hidden="true">
+        <div key={i} className={`bg-pack absolute ${p.c} ${video ? "hidden" : ""}`} style={{ "--d": p.d } as React.CSSProperties} aria-hidden="true">
           <PackArt flap={false} label={setLabel} src={packImage} />
         </div>
       ))}
@@ -182,24 +180,29 @@ export default function RipPanel({
       )}
 
       {video && (
-        <div className="relative hidden aspect-[1445/784] w-full sm:block" aria-hidden="true">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={video.poster} alt="" className="absolute inset-0 h-full w-full object-cover" />
+        <div className="relative aspect-[4/3] w-full sm:aspect-[1440/640]" aria-hidden="true">
           <video
             ref={vid}
             muted
             playsInline
             preload="auto"
             poster={video.poster}
-            className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-300 ${playing ? "opacity-100" : "opacity-0"}`}
+            className="absolute inset-0 h-full w-full object-cover"
           >
             <source src={video.webm} type="video/webm" />
             <source src={video.mp4} type="video/mp4" />
           </video>
-          <div className="absolute inset-x-0 -bottom-px h-28 bg-gradient-to-b from-transparent via-[#1d1f36]/70 to-[#1d1f36]" />
+          {/* subtle fade into the panel; the medal sits on the seam */}
+          <div className="absolute inset-x-0 -bottom-px h-[38%] bg-gradient-to-b from-transparent via-[#1b1b2b]/60 to-[#1b1b2b]" />
+          <span className="rip-badge absolute bottom-[-30px] left-1/2 z-10 flex h-[68px] w-[68px] -translate-x-1/2 items-center justify-center rounded-full border-[3px] border-[#3a3d58] bg-[#2a2c42] shadow-[0_10px_30px_rgba(0,0,0,.5)]">
+            <LogoIcon size={40} />
+            <span className="brand-grad absolute -top-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full border-2 border-[#2a2c42]">
+              <svg viewBox="0 0 12 12" width="11" height="11" aria-hidden="true"><path d="M2.5 6.2 5 8.6 9.5 3.6" fill="none" stroke="#12131c" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+            </span>
+          </span>
         </div>
       )}
-      <div className={`relative mx-auto flex h-[360px] max-w-[560px] items-end justify-center sm:h-[540px] ${video ? "sm:hidden" : ""}`}>
+      <div className={`relative mx-auto flex h-[360px] max-w-[560px] items-end justify-center sm:h-[540px] ${video ? "hidden" : ""}`}>
         <div className="orb absolute top-[14%] left-1/2 h-[68%] w-[70%] -translate-x-1/2 rounded-full" aria-hidden="true" />
         {/* Sequence (from packs.com frames): pack grows → spins fast with motion blur and turns into a card back
             → sparkles → flips to reveal the hit. One 3D element, three faces, driven by CSS keyframes. */}
@@ -231,7 +234,7 @@ export default function RipPanel({
         </span>
       </div>
 
-      <div className={`relative z-10 flex flex-col items-center gap-4 px-6 pt-14 pb-12 text-center ${video ? "sm:-mt-16 sm:pt-0" : ""}`}>
+      <div className={`relative z-10 flex flex-col items-center gap-4 px-6 pt-14 pb-12 text-center ${video ? "pt-12 sm:pt-6" : ""}`}>
         <span className="rip-cta poster flex items-center gap-4 rounded-2xl px-7 py-3 text-[clamp(36px,5vw,52px)] leading-none">
           Rip Packs
           <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
