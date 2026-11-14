@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState, type PointerEvent, type ReactNode } from "react";
+import { LogoIcon } from "./brand";
+import { PackArt } from "./RipPanel";
 
 export type RevealCard = { name: string; rarity: string | null; image_url: string | null; is_hit: boolean; number?: string };
 
@@ -12,7 +14,7 @@ type Phase = "sealed" | "tearing" | "reveal" | "summary";
  */
 export default function PackReveal({
   cards,
-  label = "BOOSTER · 10 CARTAS",
+  label = "Pitch Black",
   footer,
   onDone,
   autoOpen = false,
@@ -148,7 +150,7 @@ export default function PackReveal({
         <div className={`pack relative h-[360px] w-[236px] ${phase === "tearing" ? "torn" : ""}`} style={{ transform: `rotateX(${tilt.rx}deg) rotateY(${tilt.ry}deg)` }}>
           <div className="float relative h-full w-full">
             <div
-              className="crimp foil absolute inset-x-0 top-0 z-10 h-9 cursor-grab rounded-t-2xl rounded-b-sm active:cursor-grabbing"
+              className="crimp foil absolute inset-x-0 top-0 z-10 h-9 cursor-grab rounded-t-[14px] rounded-b-sm active:cursor-grabbing"
               style={{ clipPath: `inset(0 0 0 ${tear * 100}%)` }}
               onPointerDown={(e) => {
                 const r = e.currentTarget.getBoundingClientRect();
@@ -157,13 +159,8 @@ export default function PackReveal({
               }}
             />
             <span className="pointer-events-none absolute inset-x-3 top-[38px] z-10 border-t-2 border-dashed border-white/30" aria-hidden="true" />
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 overflow-hidden rounded-2xl border border-[#34345c] bg-gradient-to-b from-[#1c1c3a] to-[#0f0f22] shadow-[0_30px_80px_rgba(0,0,0,.6),0_0_60px_rgba(255,79,216,.18)]">
-              <div className="pointer-events-none absolute inset-0" style={{ background: `radial-gradient(circle at ${tilt.mx}% ${tilt.my}%, rgba(255,255,255,.28), transparent 42%)` }} />
-              <Star size={104} />
-              <span className="font-display text-[26px] font-bold tracking-tight">HOLO CLUB</span>
-              <span className="text-xs tracking-[3px] text-[#a6a6c0]">{label}</span>
-            </div>
-            <div className="foil absolute inset-x-0 bottom-0 h-5 rounded-t-sm rounded-b-2xl" />
+            <PackArt flap={false} label={label} className="absolute inset-0 h-full w-full" />
+            <div className="pointer-events-none absolute inset-0 rounded-[14px]" style={{ background: `radial-gradient(circle at ${tilt.mx}% ${tilt.my}%, rgba(255,255,255,.22), transparent 42%)` }} />
           </div>
         </div>
         {phase === "sealed" && (
@@ -179,25 +176,10 @@ export default function PackReveal({
   );
 }
 
-function Star({ size }: { size: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 110 110" aria-hidden="true">
-      <defs>
-        <linearGradient id="hcstar" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#FF4FD8" />
-          <stop offset=".5" stopColor="#3DE8FF" />
-          <stop offset="1" stopColor="#FFD84F" />
-        </linearGradient>
-      </defs>
-      <path d="M55 6 L66 42 L104 42 L73 64 L85 102 L55 79 L25 102 L37 64 L6 42 L44 42 Z" fill="none" stroke="url(#hcstar)" strokeWidth="5" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
 function Back() {
   return (
-    <span className="flex h-full w-full items-center justify-center rounded-2xl border-[6px] border-[#1d1d3a] bg-[radial-gradient(circle_at_50%_40%,#2a2a5a,#0f0f22)] shadow-[0_20px_50px_rgba(0,0,0,.5)]">
-      <Star size={88} />
+    <span className="flex h-full w-full items-center justify-center rounded-2xl border-[6px] border-[#1d1d3a] bg-[radial-gradient(circle_at_50%_40%,#4b2fa6,#1c1446)] shadow-[0_20px_50px_rgba(0,0,0,.5)]">
+      <LogoIcon size={110} />
     </span>
   );
 }

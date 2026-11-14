@@ -1,4 +1,3 @@
-import Link from "next/link";
 
 export const inputCls =
   "min-h-11 w-full rounded-xl border border-[#3a3a5c] bg-ink px-4 text-base text-white placeholder:text-dim focus:border-cyan focus:outline-none";
@@ -48,11 +47,4 @@ export function Stat({ label, value, accent = "text-white" }: { label: string; v
   );
 }
 
-export function Logo() {
-  return (
-    <Link href="/" className="flex items-center gap-2.5 text-white no-underline">
-      <span className="foil block h-[30px] w-[30px] rounded-[9px]" aria-hidden="true" />
-      <span className="font-display text-xl font-bold tracking-tight">Holo Club</span>
-    </Link>
-  );
-}
+export { LogoFull as Logo } from "./brand";

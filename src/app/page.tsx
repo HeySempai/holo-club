@@ -1,9 +1,12 @@
 import Link from "next/link";
-import LandingDemo from "@/components/LandingDemo";
+import RipPanel, { PackArt } from "@/components/RipPanel";
+import SiteHeader from "@/components/SiteHeader";
 import WaitlistForm from "@/components/WaitlistForm";
+import { LogoIcon } from "@/components/brand";
 import { getSupabase } from "@/lib/supabase";
+import { getProfile } from "@/lib/supabase/server";
 
-export const revalidate = 60;
+export const dynamic = "force-dynamic";
 
 const FOUNDER_SPOTS = 50;
 
@@ -16,11 +19,27 @@ async function getWaitlistCount(): Promise<number | null> {
 
 type Pull = { alias: string; set_name: string; hits: { name: string; rarity: string | null; image_url: string | null }[] };
 
-async function getRecentHits(): Promise<Pull[]> {
+async function getHomeData() {
   const supabase = getSupabase();
-  if (!supabase) return [];
-  const { data } = await supabase.rpc("wall_feed", { p_limit: 30 });
-  return ((data ?? []) as Pull[]).filter((e) => e.hits?.length).slice(0, 8);
+  if (!supabase) return { feed: [] as Pull[], setName: null as string | null, today: 0 };
+  const [{ data: feed }, { data: set }, { data: today }] = await Promise.all([
+    supabase.rpc("wall_feed", { p_limit: 30 }),
+    supabase.from("sets").select("name").eq("active", true).order("created_at", { ascending: false }).limit(1).maybeSingle(),
+    supabase.rpc("packs_today"),
+  ]);
+  return { feed: (feed ?? []) as Pull[], setName: (set?.name as string | undefined) ?? null, today: Number(today ?? 0) };
+}
+
+function Tick({ href, eyebrow, title, thumb }: { href: string; eyebrow: string; title: string; thumb: React.ReactNode }) {
+  return (
+    <Link href={href} className="tick flex w-[230px] shrink-0 items-center gap-3 rounded-2xl bg-[#1c1e2e] p-2 pr-4 text-white no-underline">
+      <span className="relative flex h-[68px] w-[52px] shrink-0 items-center justify-center">{thumb}</span>
+      <span className="flex min-w-0 flex-col">
+        <span className="text-xs font-semibold uppercase tracking-wide text-[#9a9db4]">{eyebrow}</span>
+        <span className="truncate text-[17px] font-semibold">{title}</span>
+      </span>
+    </Link>
+  );
 }
 
 function Check() {
@@ -56,50 +75,65 @@ const FAQ = [
 ];
 
 export default async function Home() {
-  const [count, recent] = await Promise.all([getWaitlistCount(), getRecentHits()]);
+  const [count, { feed, setName, today }, { profile }] = await Promise.all([getWaitlistCount(), getHomeData(), getProfile()]);
+  const player = profile?.alias ? `@${profile.alias}` : profile ? (profile.email?.split("@")[0] ?? null) : null;
+  const recentHit = feed.find((e) => e.hits?.length)?.hits[0];
+  const justRipped = feed[0];
   const subscribeUrl = process.env.NEXT_PUBLIC_MP_SUBSCRIPTION_URL;
   const spotsLeft = count === null ? null : Math.max(FOUNDER_SPOTS - count, 0);
 
   return (
     <div className="min-h-screen overflow-x-hidden">
-      <header className="mx-auto flex max-w-[1200px] flex-wrap items-center justify-between gap-4 px-6 py-5">
-        <Link href="/" className="flex items-center gap-2.5 text-white no-underline">
-          <span className="foil block h-[34px] w-[34px] rounded-[10px]" aria-hidden="true" />
-          <span className="font-display text-[22px] font-bold tracking-tight">Holo Club</span>
-        </Link>
-        <nav aria-label="Principal" className="flex flex-wrap items-center gap-6 text-[15px]">
-          <a href="#como" className="text-mist hover:text-white">Cómo funciona</a>
-          <a href="#plan" className="text-mist hover:text-white">Plan</a>
-          <a href="#fundadores" className="text-mist hover:text-white">Fundadores</a>
-          <Link href="/colecciones" className="text-mist hover:text-white">Colecciones</Link>
-          <Link href="/muro" className="text-mist hover:text-white">Muro</Link>
-          <Link href="/cuenta" className="text-mist hover:text-white">Mi cuenta</Link>
-          <a href="#fundadores" className="btn inline-flex min-h-11 items-center rounded-full bg-cyan px-5 font-semibold text-ink">Unirme</a>
-        </nav>
-      </header>
+      <SiteHeader />
 
       <main>
-        <section className="mx-auto flex max-w-[1200px] flex-wrap items-center gap-12 px-6 pt-12 pb-18">
-          <div className="flex min-w-0 flex-[1_1_460px] flex-col gap-6">
-            <span className="self-start rounded-full border border-[#2a2a4a] px-3.5 py-2 text-[13px] uppercase tracking-[1.5px] text-[#9ef4ff]">
-              Club de sobres de Pokémon TCG en inglés
-            </span>
-            <h1 className="glow m-0 font-display text-[clamp(40px,6vw,72px)] leading-[1.02] font-bold tracking-[-2px]">
-              Sobres sellados. Precio justo. Cada mes en tu puerta.
-            </h1>
-            <p className="m-0 max-w-[520px] text-[19px] leading-relaxed text-mist">
-              Sin revendedores, sin cajas completas y sin ir a la tienda. Te suscribes, recibes 10 sobres sellados de fábrica y registras tus cartas en la comunidad.
-            </p>
-            <div className="flex flex-wrap gap-3">
-              <a href="#plan" className="btn min-h-11 rounded-full bg-cyan px-7 py-4 text-[17px] font-semibold text-ink">Ver el plan</a>
-              <a href="#fundadores" className="min-h-11 rounded-full border border-[#3a3a5c] px-7 py-4 text-[17px] font-medium text-white hover:border-cyan">
-                Lugar de fundador
-              </a>
+        <section className="mx-auto flex max-w-[1080px] flex-col gap-7 px-4 pt-8 pb-16 sm:px-6 sm:pt-12">
+          <div className="flex flex-wrap items-center justify-between gap-5">
+            <div className="flex items-center gap-4">
+              <span className="welcome-badge relative flex h-[84px] w-[84px] items-center justify-center rounded-[22px] bg-[linear-gradient(145deg,#3b2f7d,#22194f)] shadow-[0_10px_30px_rgba(59,47,125,.5)]">
+                <LogoIcon size={64} />
+              </span>
+              <span className="flex flex-col">
+                <span className="text-[22px] text-[#c9cbe0] sm:text-[26px]">{player ? "Welcome back," : "Welcome,"}</span>
+                <span className="poster text-[38px] leading-none sm:text-[46px]">{player ?? "New Player"}</span>
+              </span>
+            </div>
+            <div className="-mx-4 flex w-[calc(100%+2rem)] min-w-0 gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:w-auto sm:px-0">
+              <Link href="/muro" className="tick flex shrink-0 items-center gap-3 rounded-2xl bg-[#1c1e2e] px-5 py-3 text-white no-underline">
+                <svg viewBox="0 0 24 24" width="26" height="26" fill="#c9cbe0" aria-hidden="true"><rect x="2" y="6" width="14" height="12" rx="3" /><path d="M17 10.5 22 7.5v9l-5-3z" /></svg>
+                <span className="flex flex-col leading-tight">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-[#9a9db4]">Recent</span>
+                  <span className="poster text-[18px]">Highlights</span>
+                </span>
+              </Link>
+              <Tick
+                href="/muro"
+                eyebrow="Recent hit"
+                title={recentHit?.name ?? "Sé el primero"}
+                thumb={
+                  recentHit?.image_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={recentHit.image_url} alt="" className="h-full w-full rounded-md object-cover shadow-[0_0_0_1.5px_#ffd84f]" />
+                  ) : (
+                    <span className="foil h-full w-full rounded-md" />
+                  )
+                }
+              />
+              <Tick
+                href={justRipped ? "/muro" : "/packs"}
+                eyebrow="Just ripped"
+                title={justRipped?.set_name ?? setName ?? "Pitch Black"}
+                thumb={<PackArt className="w-[44px]" flap={false} label="" />}
+              />
             </div>
           </div>
-          <div className="flex min-w-0 flex-[1_1_420px] justify-center">
-            <LandingDemo />
-          </div>
+
+          <RipPanel
+            todayLabel={today > 0 ? `${today} today` : count ? `${count} fundadores` : null}
+            hitImage={recentHit?.image_url}
+            hitName={recentHit?.name}
+            setLabel={setName?.replace(/^.*?:\s*/, "") ?? "Pitch Black"}
+          />
         </section>
 
         <section aria-label="Comparación de precios" className="border-y border-[#1e1e38] bg-panel">
@@ -117,26 +151,6 @@ export default async function Home() {
           </div>
           <p className="mx-auto max-w-[1200px] px-6 pb-6 text-xs text-dim">Precios observados en México en noviembre de 2026; pueden cambiar.</p>
         </section>
-
-        {recent.length > 0 && (
-          <section aria-label="Últimos hits del club" className="mx-auto flex max-w-[1200px] flex-col gap-4 px-6 pt-16">
-            <div className="flex flex-wrap items-baseline justify-between gap-3">
-              <h2 className="m-0 font-display text-2xl font-bold">Lo último que le salió al club</h2>
-              <Link href="/muro" className="text-sm text-cyan">Ver el muro →</Link>
-            </div>
-            <ul className="m-0 flex list-none gap-4 overflow-x-auto p-0 pb-2">
-              {recent.flatMap((e, i) =>
-                e.hits.map((h, j) => (
-                  <li key={`${i}-${j}`} className="hit flex w-[170px] shrink-0 flex-col gap-1 rounded-xl bg-card p-3">
-                    <span className="font-display text-sm font-semibold text-gold">★ {h.name}</span>
-                    <span className="text-xs text-mist">{h.rarity}</span>
-                    <span className="text-xs text-dim">@{e.alias} · {e.set_name}</span>
-                  </li>
-                )),
-              )}
-            </ul>
-          </section>
-        )}
 
         <section id="como" className="mx-auto flex max-w-[1200px] flex-col gap-10 px-6 py-24">
           <div className="flex max-w-[640px] flex-col gap-3">

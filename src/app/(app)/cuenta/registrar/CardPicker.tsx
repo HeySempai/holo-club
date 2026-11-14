@@ -37,7 +37,7 @@ export default function CardPicker({ code, setName, perPack, maxHits, cards }: {
         <Card>
           <PackReveal
             cards={mine}
-            label={`${code} · ${setName.toUpperCase()}`}
+            label={setName.replace(/^.*?:\s*/, "")}
             footer={
               <div className="flex flex-wrap gap-3">
                 <Link href="/cuenta" className={btnCls}>Registrar otro</Link>

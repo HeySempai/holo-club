@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "@fontsource-variable/inter/index.css";
+import "@fontsource-variable/archivo/wdth.css";
 import "@fontsource/space-grotesk/500.css";
 import "@fontsource/space-grotesk/600.css";
 import "@fontsource/space-grotesk/700.css";
@@ -17,7 +18,7 @@ export const metadata: Metadata = {
   },
 };
 
-export const viewport: Viewport = { themeColor: "#0B0B14" };
+export const viewport: Viewport = { themeColor: "#12131C" };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (

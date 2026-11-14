@@ -45,7 +45,7 @@ export default async function Coleccion({ params }: Props) {
   return (
     <>
       <div className="flex flex-col gap-2">
-        <Link href="/colecciones" className="text-sm text-dim hover:text-white">← Colecciones</Link>
+        <Link href="/packs" className="text-sm text-dim hover:text-white">← Packs</Link>
         <h1 className="m-0 font-display text-[clamp(30px,4.5vw,46px)] font-bold tracking-tight">{set.name}</h1>
         <p className="m-0 text-mist">
           {set.cards_per_pack} cartas por sobre · máximo {set.max_hits_per_pack} hits por sobre · {PACKS_PER_MONTH} sobres sellados al mes por ${PRICE_MXN.toLocaleString("es-MX")}
