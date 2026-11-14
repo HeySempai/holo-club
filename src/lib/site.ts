@@ -44,3 +44,11 @@ export const fmtDate = (d: string | null) =>
 
 export const fmtPeriod = (d: string) =>
   new Date(d + "T12:00:00").toLocaleDateString("es-MX", { month: "long", year: "numeric" });
+
+/** Featured set art used across the home (official product photo + a real chase card). */
+export const FEATURED = {
+  pack: "/brand/pack-pitch-black.webp",
+  hit: "/brand/hit-mega-darkrai-ex.webp",
+  hitName: "Mega Darkrai ex",
+  video: { webm: "/brand/rip.webm", mp4: "/brand/rip.mp4", poster: "/brand/rip-poster.webp" },
+};

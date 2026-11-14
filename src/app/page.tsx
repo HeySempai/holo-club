@@ -5,6 +5,7 @@ import WaitlistForm from "@/components/WaitlistForm";
 import { LogoIcon } from "@/components/brand";
 import { getSupabase } from "@/lib/supabase";
 import { getProfile } from "@/lib/supabase/server";
+import { FEATURED } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
 
@@ -123,15 +124,17 @@ export default async function Home() {
                 href={justRipped ? "/muro" : "/packs"}
                 eyebrow="Just ripped"
                 title={justRipped?.set_name ?? setName ?? "Pitch Black"}
-                thumb={<PackArt className="w-[44px]" flap={false} label="" />}
+                thumb={<PackArt className="w-[44px]" flap={false} label="" src={FEATURED.pack} />}
               />
             </div>
           </div>
 
           <RipPanel
             todayLabel={today > 0 ? `${today} today` : count ? `${count} fundadores` : null}
-            hitImage={recentHit?.image_url}
-            hitName={recentHit?.name}
+            hitImage={FEATURED.hit}
+            hitName={FEATURED.hitName}
+            packImage={FEATURED.pack}
+            video={FEATURED.video}
             setLabel={setName?.replace(/^.*?:\s*/, "") ?? "Pitch Black"}
           />
         </section>
