@@ -1,0 +1,271 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<style>html,body{margin:0;background:#1b1c2b;overflow:hidden}canvas{display:block}</style>
+<script type="importmap">
+{ "imports": { "three": "./node_modules/three/build/three.module.js", "three/addons/": "./node_modules/three/examples/jsm/" } }
+</script>
+</head>
+<body>
+<script type="module">
+import * as THREE from "three";
+import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
+import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
+
+const P = new URLSearchParams(location.search);
+const W = +(P.get("w") || 1440), H = +(P.get("h") || 640);
+const T = 2.9; // loop length (s); frame at T == frame at 0
+
+// ---------- helpers ----------
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const lerp = (a, b, t) => a + (b - a) * t;
+const seg = (t, a, b) => clamp((t - a) / (b - a)); // 0..1 progress inside [a,b]
+const easeOutCubic = (x) => 1 - Math.pow(1 - x, 3);
+const easeInCubic = (x) => x * x * x;
+const easeInOut = (x) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2);
+const easeOutBack = (x, s = 1.6) => 1 + (s + 1) * Math.pow(x - 1, 3) + s * Math.pow(x - 1, 2);
+const smooth = (x) => x * x * (3 - 2 * x);
+// deterministic random
+let seed = 7; const rnd = () => ((seed = (seed * 16807) % 2147483647) - 1) / 2147483646;
+
+function loadImg(src) { return new Promise((r) => { const i = new Image(); i.onload = () => r(i); i.src = src; }); }
+function canvasTex(c) { const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return t; }
+function roundedTex(img, radiusFrac = 0.045, blur = 0, scale = 1) {
+  const c = document.createElement("canvas"); c.width = img.width * scale; c.height = img.height * scale;
+  const x = c.getContext("2d"); const r = c.width * radiusFrac;
+  x.beginPath(); x.roundRect(0, 0, c.width, c.height, r); x.clip();
+  if (blur) x.filter = `blur(${blur}px)`;
+  x.drawImage(img, 0, 0, c.width, c.height); return canvasTex(c);
+}
+function radialTex(stops, size = 256) {
+  const c = document.createElement("canvas"); c.width = c.height = size; const x = c.getContext("2d");
+  x.fillStyle = "#000"; x.fillRect(0, 0, size, size);
+  const g = x.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  stops.forEach(([o, col]) => g.addColorStop(o, col)); x.fillStyle = g; x.fillRect(0, 0, size, size); return canvasTex(c);
+}
+function starTex(size = 256) {
+  const c = document.createElement("canvas"); c.width = c.height = size; const x = c.getContext("2d"); const m = size / 2;
+  x.fillStyle = "#000"; x.fillRect(0, 0, size, size);
+  const g = x.createRadialGradient(m, m, 0, m, m, m * 0.5); g.addColorStop(0, "rgba(255,255,255,.9)"); g.addColorStop(1, "rgba(255,255,255,0)");
+  x.fillStyle = g; x.fillRect(0, 0, size, size);
+  x.fillStyle = "#fff"; x.beginPath();
+  // 4-point star with concave sides
+  x.moveTo(m, 0); x.quadraticCurveTo(m + m * 0.12, m - m * 0.12, size, m); x.quadraticCurveTo(m + m * 0.12, m + m * 0.12, m, size);
+  x.quadraticCurveTo(m - m * 0.12, m + m * 0.12, 0, m); x.quadraticCurveTo(m - m * 0.12, m - m * 0.12, m, 0); x.fill();
+  return canvasTex(c);
+}
+function raysTex(size = 1024, n = 22) {
+  const c = document.createElement("canvas"); c.width = c.height = size; const x = c.getContext("2d"); const m = size / 2;
+  x.fillStyle = "#000"; x.fillRect(0, 0, size, size);
+  x.translate(m, m); x.filter = "blur(10px)";
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2 + rnd() * 0.2, w = 0.04 + rnd() * 0.07, len = m * (0.7 + rnd() * 0.3);
+    const g = x.createLinearGradient(0, 0, Math.cos(a) * len, Math.sin(a) * len);
+    g.addColorStop(0, "rgba(255,255,255,.55)"); g.addColorStop(1, "rgba(255,255,255,0)");
+    x.fillStyle = g; x.beginPath(); x.moveTo(0, 0);
+    x.arc(0, 0, len, a - w, a + w); x.closePath(); x.fill();
+  }
+  const g = x.createRadialGradient(0, 0, 0, 0, 0, m); g.addColorStop(0, "rgba(0,0,0,0)"); g.addColorStop(0.15, "rgba(0,0,0,0)"); g.addColorStop(1, "rgba(0,0,0,1)");
+  x.filter = "none"; x.fillStyle = g; x.fillRect(-m, -m, size, size);
+  return canvasTex(c);
+}
+// Additive layers use black-backed textures: black adds nothing, so no alpha fringes.
+const add = (map, color = 0xffffff, opacity = 1) =>
+  new THREE.MeshBasicMaterial({ map, color, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false, alphaTest: 0 });
+
+// ---------- renderer / scene ----------
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(1); renderer.setSize(W, H);
+renderer.toneMapping = THREE.NoToneMapping;
+document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(28, W / H, 0.1, 100); camera.position.set(0, 0.6, 11.5); camera.lookAt(0, 0.15, 0);
+
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(new THREE.Vector2(W, H), 0.6, 0.7, 0.92);
+composer.addPass(bloom); composer.addPass(new OutputPass());
+
+const [packImg, hitImg, backImg] = await Promise.all([loadImg("assets/pack.webp"), loadImg("assets/hit.png"), loadImg("assets/back.jpg")]);
+
+// background gradient (matches the site panel)
+{
+  const c = document.createElement("canvas"); c.width = 1440; c.height = 640; const x = c.getContext("2d");
+  const lg = x.createLinearGradient(0, 0, 0, 640); lg.addColorStop(0, "#1f1e3a"); lg.addColorStop(0.6, "#1b1b2f"); lg.addColorStop(1, "#1b1c2b");
+  x.fillStyle = lg; x.fillRect(0, 0, 1440, 640);
+  const rg = x.createRadialGradient(720, 250, 0, 720, 250, 620); rg.addColorStop(0, "rgba(116,66,255,.30)"); rg.addColorStop(1, "rgba(116,66,255,0)");
+  x.fillStyle = rg; x.fillRect(0, 0, 1440, 640);
+  const bg = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: canvasTex(c), depthWrite: false }));
+  const d = 30; const hh = 2 * Math.tan(THREE.MathUtils.degToRad(14)) * (11.5 + d) * 1.25;
+  bg.scale.set(hh * (W / H), hh, 1); bg.position.y = 0.6; bg.position.z = -d; bg.renderOrder = -10; scene.add(bg);
+}
+
+// background card backs, blurred, in perspective
+const backBlur = roundedTex(backImg, 0.05, 7, 0.4);
+const bgCards = [];
+[[-5.6, 1.4, -3, 0.5, -0.35, 0.4], [-4.4, -1.8, -2, -0.2, 0.5, -0.5], [4.6, 2.0, -3, -0.4, -0.4, 0.5], [5.4, -1.4, -2, 0.3, 0.5, -0.35], [-2.2, 3.2, -6, 0.2, 0.1, 0.6], [2.6, -3.2, -5, -0.3, -0.3, -0.4]]
+  .forEach(([x, y, z, rx, ry, rz], i) => {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(1.9, 2.65), new THREE.MeshBasicMaterial({ map: backBlur, transparent: true, opacity: 0.12, depthWrite: false }));
+    m.position.set(x, y, z); m.rotation.set(rx, ry, rz); m.userData = { x, y, z, rx, ry, rz, ph: i * 1.3 }; m.renderOrder = -5; scene.add(m); bgCards.push(m);
+  });
+
+// glows
+const softWhite = radialTex([[0, "rgba(255,255,255,1)"], [0.25, "rgba(255,255,255,.55)"], [1, "rgba(255,255,255,0)"]]);
+const orb = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), add(softWhite, 0x7442ff, 0.9)); orb.position.z = -1.5; orb.renderOrder = -2; scene.add(orb);
+const openGlow = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), add(softWhite, 0xe0d4ff, 1)); openGlow.renderOrder = 5; scene.add(openGlow);
+const flash = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), add(softWhite, 0xffffff, 0)); flash.renderOrder = 6; scene.add(flash);
+const rays = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), add(raysTex(), 0x9a6bff, 0)); rays.position.z = -1; rays.renderOrder = -1; scene.add(rays);
+
+// ---------- pack ----------
+const PW = 2.6, PH = PW * (packImg.height / packImg.width), FLAP = 0.06; // flap = top 8.5% of the pack
+const packTex = roundedTex(packImg, 0.02);
+const pack = new THREE.Group(); scene.add(pack);
+const packHalo = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), add(softWhite, 0x8c5cff, 0.9)); packHalo.renderOrder = -1; scene.add(packHalo);
+const bodyGeo = new THREE.PlaneGeometry(PW, PH * (1 - FLAP));
+{ const uv = bodyGeo.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setY(i, uv.getY(i) * (1 - FLAP)); }
+const body = new THREE.Mesh(bodyGeo, new THREE.MeshBasicMaterial({ map: packTex, transparent: true }));
+body.position.y = -PH * FLAP / 2; pack.add(body);
+// foil sheen sweeping across the body
+const sheenTex = (() => { const c = document.createElement("canvas"); c.width = 512; c.height = 64; const x = c.getContext("2d"); x.fillStyle = "#000"; x.fillRect(0, 0, 512, 64); const g = x.createLinearGradient(0, 0, 512, 0); g.addColorStop(0, "rgba(255,255,255,0)"); g.addColorStop(0.45, "rgba(255,255,255,0)"); g.addColorStop(0.5, "rgba(255,255,255,.35)"); g.addColorStop(0.55, "rgba(255,255,255,0)"); g.addColorStop(1, "rgba(255,255,255,0)"); x.fillStyle = g; x.fillRect(0, 0, 512, 64); return canvasTex(c); })();
+sheenTex.wrapS = THREE.RepeatWrapping;
+const sheen = new THREE.Mesh(bodyGeo, add(sheenTex, 0xffffff, 0.5)); sheen.position.copy(body.position); sheen.position.z = 0.005; sheen.rotation.z = 0; pack.add(sheen);
+// flap: the torn top strip, still attached at its right end, peeling up/left and toward the camera (ribbon)
+const FW = 40, FH = 4, FLH = PH * FLAP;
+const flapGeo = new THREE.PlaneGeometry(PW, FLH, FW, FH);
+{ const uv = flapGeo.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setY(i, 1 - FLAP + uv.getY(i) * FLAP); }
+const flapBase = flapGeo.attributes.position.array.slice();
+const flapMat = new THREE.MeshBasicMaterial({ map: packTex, transparent: true, side: THREE.FrontSide });
+const flapBackMat = new THREE.MeshBasicMaterial({ color: 0xcfc8ee, transparent: true, side: THREE.BackSide });
+const flap = new THREE.Mesh(flapGeo, flapMat), flapB = new THREE.Mesh(flapGeo, flapBackMat);
+const flapPivot = new THREE.Group(); flapPivot.position.set(PW / 2, PH / 2 - FLH / 2, 0); pack.add(flapPivot);
+flap.position.x = 0; flapPivot.add(flap); flapPivot.add(flapB);
+function bendFlap(amount) {
+  // s = distance from the attached right end (0..PW). Curve rises (theta) and comes forward (z).
+  const p = flapGeo.attributes.position, N = 120, pts = []; let x = 0, y = 0, z = 0;
+  for (let k = 0; k <= N; k++) { const sN = k / N; pts.push([x, y, z]); const th = amount * (0.12 + 0.55 * Math.pow(sN, 1.6)); const ds = PW / N; x -= Math.cos(th) * ds; y += Math.sin(th) * ds; z += amount * 1.1 * sN * ds; }
+  for (let i = 0; i < p.count; i++) {
+    const bx = flapBase[i * 3], by = flapBase[i * 3 + 1];
+    const sN = clamp((PW / 2 - bx) / PW), k = Math.round(sN * N), [cx, cy, cz] = pts[k];
+    const tw = -amount * 1.5 * Math.pow(sN, 1.2); // twist: the strip turns as it peels
+    p.setXYZ(i, cx, cy + by * Math.cos(tw), cz + by * Math.sin(tw));
+  }
+  p.needsUpdate = true;
+}
+// glow peeking out of the opening
+openGlow.scale.set(3.2, 2.2, 1);
+
+// ---------- card ----------
+const CW = 2.45, CH = CW * 88 / 63;
+const card = new THREE.Group(); scene.add(card);
+const back = new THREE.Mesh(new THREE.PlaneGeometry(CW, CH), new THREE.MeshBasicMaterial({ map: roundedTex(backImg, 0.045), transparent: true }));
+const front = new THREE.Mesh(new THREE.PlaneGeometry(CW, CH), new THREE.MeshBasicMaterial({ map: roundedTex(hitImg, 0.045), transparent: true }));
+front.rotation.y = Math.PI; back.material.side = THREE.FrontSide; front.material.side = THREE.FrontSide;
+card.add(back); card.add(front);
+const cardSheen = new THREE.Mesh(new THREE.PlaneGeometry(CW, CH), add(sheenTex, 0xffffff, 0)); cardSheen.rotation.y = Math.PI; cardSheen.position.z = -0.003; card.add(cardSheen);
+const rim = new THREE.Mesh(new THREE.PlaneGeometry(CW * 2.1, CH * 1.7), add(softWhite, 0xff6bd8, 0)); rim.position.z = -0.2; rim.renderOrder = -1; card.add(rim);
+
+// ---------- sparkles (fixed slots around the card) ----------
+const star = starTex();
+const sparkles = [[-1.55, 1.75, 0.55, 0], [1.6, 1.15, 0.38, 0.25], [-1.85, -0.2, 0.28, 0.5], [1.75, -0.75, 0.75, 0.15], [-1.2, -1.95, 0.22, 0.4], [0.75, 2.05, 0.26, 0.65], [-0.4, 2.3, 0.18, 0.8], [1.25, -2.0, 0.3, 0.9]].map(([x, y, s, ph], i) => {
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), add(star, i % 3 === 0 ? 0xf2bfe8 : i % 3 === 1 ? 0xe2d8ff : 0xcdb6ff, 0));
+  m.userData = { x, y, s, ph }; m.renderOrder = 8; scene.add(m); return m;
+});
+
+// ---------- falling sparks with gravity ----------
+const dot = radialTex([[0, "rgba(255,255,255,1)"], [0.3, "rgba(255,230,255,.8)"], [1, "rgba(255,255,255,0)"]], 64);
+const SPARKS = 46;
+const sparks = Array.from({ length: SPARKS }, () => {
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), add(dot, rnd() > 0.5 ? 0xffc8f2 : 0xe4d6ff, 0)); m.renderOrder = 9; scene.add(m);
+  const ang = rnd() * Math.PI * 2;
+  m.userData = { t0: 0.5 + rnd() * 0.25, x0: (rnd() - 0.5) * CW, y0: (rnd() - 0.2) * CH * 0.6, vx: Math.cos(ang) * (0.8 + rnd() * 2.2), vy: 1.5 + rnd() * 3.2, life: 0.7 + rnd() * 0.8, s: 0.08 + rnd() * 0.12 };
+  return m;
+});
+const G = -7.5;
+
+// ---------- timeline ----------
+const violet = new THREE.Color(0x7442ff), hitCol = new THREE.Color(0xd94bd1), green = new THREE.Color(0x63e08a);
+function renderAt(t) {
+  t = ((t % T) + T) % T;
+  const loopPh = (t / T) * Math.PI * 2;
+  const bob = Math.sin(loopPh * 2) * 0.06;
+
+  // --- pack ---
+  // out: drops 0.45–0.56 ; back in: rises 2.40–2.62 ; flap reopens 2.55–2.9 (closed while away)
+  let packY = -0.6, packA = 1, flapAng = 0.95, flapGone = 0;
+  if (t >= 0.45 && t < 2.4) { const k = easeInCubic(seg(t, 0.45, 0.56)); packY = lerp(-0.6, -7, k); }
+  if (t >= 2.4) { const k = easeOutCubic(seg(t, 2.4, 2.62)); packY = lerp(-7, -0.6, k); }
+  // flap angle: open at loop start, small breathing; flies off at 0.45; reattached closed then reopens at the end
+  if (t < 0.45) flapAng = 0.95 + 0.06 * Math.sin(t * 9);
+  else if (t < 2.4) { flapGone = easeOutCubic(seg(t, 0.44, 0.62)); }
+  else flapAng = lerp(0.0, 0.95, easeOutBack(seg(t, 2.55, 2.85), 1.2));
+  pack.position.set(0, packY + bob, 0); pack.rotation.set(-0.08, 0.18 + Math.sin(loopPh) * 0.05, -0.11);
+  pack.scale.setScalar(1 + 0.05 * smooth(seg(t, 0.0, 0.42)) * (t < 0.45 ? 1 : 0));
+  bendFlap(flapAng);
+  flapPivot.position.set(PW / 2 + flapGone * 1.2, PH / 2 - FLH / 2 + flapGone * 3.2, flapGone * 1.5);
+  flapPivot.rotation.set(-flapGone * 1.6, flapGone * 0.9, flapGone * 1.2);
+  flapMat.opacity = flapBackMat.opacity = 1 - seg(t, 0.46, 0.53) * (t < 2.4 ? 1 : 0);
+  sheenTex.offset.x = -t * 0.9; sheen.material.opacity = 0.25;
+
+  packHalo.position.set(pack.position.x, pack.position.y + 0.3, -0.4); packHalo.scale.set(PW * 2.6, PH * 1.5, 1); packHalo.material.opacity = (t < 0.5 ? 0.75 + 0.25 * seg(t, 0, 0.45) : t > 2.45 ? 0.75 * seg(t, 2.45, 2.75) : 0) * (1 - seg(t, 0.47, 0.55));
+  // glow at the opening grows while the pack sits there, both at start and end of the loop
+  const openK = t < 0.5 ? lerp(0.55, 1.35, smooth(seg(t, 0, 0.45))) * (1 - seg(t, 0.47, 0.55)) : t > 2.5 ? lerp(0, 0.55, smooth(seg(t, 2.5, 2.9))) : 0;
+  openGlow.position.set(pack.position.x - 0.75, pack.position.y + PH / 2 - 0.05, 0.3); openGlow.material.opacity = Math.min(1.4, openK * 1.35); openGlow.scale.set(3.6 * (0.7 + openK * 0.35), 2.0 * (0.7 + openK * 0.35), 1); openGlow.rotation.z = 0.35;
+
+  // --- card ---
+  // rise 0.48–0.66 (back showing), hover, flip 1.05–1.15, settle, drop 2.28–2.42
+  let cardY = -7, cardRotY = 0, cardRotZ = -0.24, cardS = 0.86;
+  if (t >= 0.48 && t < 2.28) { const k = easeOutBack(seg(t, 0.46, 0.58), 1.25); cardY = lerp(-7, 0.2, k); cardS = lerp(0.85, 1, seg(t, 0.46, 0.62)); }
+  if (t >= 2.28) { cardY = lerp(0.2, -7.5, easeInCubic(seg(t, 2.28, 2.42))); cardS = 1; }
+  cardRotZ = lerp(-0.26, -0.2, seg(t, 0.55, 1.0));
+  const flip = easeInOut(seg(t, 1.04, 1.15)); cardRotY = flip * Math.PI;
+  cardRotZ = lerp(cardRotZ, -0.13, smooth(seg(t, 1.1, 1.4)));
+  const cardBob = Math.sin((t - 0.6) * 3.2) * 0.05;
+  card.position.set(0.05, cardY + cardBob, 0.4); card.rotation.set(-0.05, cardRotY + 0.12 * Math.sin(t * 2.1) * seg(t, 0.7, 1.0) * (1 - seg(t, 1.0, 1.04)), cardRotZ); card.scale.setScalar(cardS * (1 + 0.04 * Math.sin(seg(t, 1.12, 1.4) * Math.PI)));
+  cardSheen.material.opacity = 0.5 * seg(t, 1.12, 1.25); cardSheen.material.map.offset.x = -t * 0.7;
+  const glowCol = violet.clone().lerp(hitCol, smooth(seg(t, 1.1, 1.45)) * (1 - smooth(seg(t, 2.25, 2.5))));
+  rim.material.color.copy(glowCol).multiplyScalar(1.6); rim.material.opacity = seg(t, 0.5, 0.62) * (1 - seg(t, 2.26, 2.36)) * 1.15;
+
+  // flashes: opening burst and flip burst
+  const f1 = Math.max(0, 1 - Math.abs(t - 0.5) / 0.08), f2 = Math.max(0, 1 - Math.abs(t - 1.1) / 0.07);
+  flash.position.set(0, t < 0.8 ? 1.6 : 0.2, 1); flash.scale.setScalar(t < 0.8 ? 3.6 * f1 + 0.01 : 3.4 * f2 + 0.01); flash.material.opacity = t < 0.8 ? f1 * 0.7 : f2 * 0.6;
+
+  // orb and rays behind
+  orb.material.color.copy(glowCol); orb.position.set(0, 0.4, -1.5);
+  const orbK = t < 0.45 ? lerp(0.55, 0.8, seg(t, 0, 0.45)) : t < 2.3 ? 0.95 : lerp(0.95, 0.55, seg(t, 2.3, 2.6));
+  orb.scale.set(8.5 * orbK + 2, 6.5 * orbK + 1.5, 1); orb.material.opacity = 0.55 + 0.25 * seg(t, 0.5, 0.7) * (1 - seg(t, 2.3, 2.5));
+  rays.material.color.copy(glowCol); rays.material.opacity = 0.55 * seg(t, 0.55, 0.85) * (1 - seg(t, 2.25, 2.4));
+  rays.scale.setScalar(9); rays.rotation.z = t * 0.25; rays.position.set(0, 0.2, -1);
+
+  // sparkles: appear with the card, twinkle in place, leave with the card
+  const sparkOn = seg(t, 0.56, 0.72) * (1 - seg(t, 2.25, 2.33));
+  sparkles.forEach((m) => {
+    const { x, y, s, ph } = m.userData; const tw = 0.55 + 0.45 * Math.sin((t * 5.2 + ph * 6.28));
+    m.position.set(card.position.x + x, card.position.y + y, 1.2); m.rotation.z = t * 1.4 + ph * 3;
+    m.scale.setScalar(1.7 * s * (0.6 + 0.6 * tw) * (sparkOn > 0 ? 1 : 0) + 0.0001); m.material.opacity = sparkOn * tw * 0.85;
+  });
+
+  // sparks: emitted as the card rises, fall with gravity
+  sparks.forEach((m) => {
+    const u = m.userData, dt = t - u.t0;
+    if (dt < 0 || dt > u.life) { m.material.opacity = 0; return; }
+    m.position.set(u.x0 + u.vx * dt, u.y0 + u.vy * dt + 0.5 * G * dt * dt, 1.1);
+    m.scale.setScalar(u.s * (1 - dt / u.life * 0.5)); m.material.opacity = (1 - dt / u.life) * 0.95;
+  });
+
+  // background cards drift (periodic) and part slightly while the card is out
+  const part = smooth(seg(t, 0.45, 0.7)) * (1 - smooth(seg(t, 2.3, 2.6)));
+  bgCards.forEach((m) => { const u = m.userData; m.position.set(u.x * (1 + 0.06 * part), u.y + Math.sin(loopPh + u.ph) * 0.12 + Math.sign(u.y) * 0.25 * part, u.z); m.rotation.set(u.rx, u.ry, u.rz + Math.sin(loopPh + u.ph) * 0.03); m.material.opacity = 0.055 + 0.035 * part; });
+
+  bloom.strength = 0.7 + 0.25 * openK + 0.4 * f1 + 0.2 * f2;
+  composer.render();
+}
+window.renderAt = renderAt;
+window.T = T;
+renderAt(0);
+window.ready = true;
+</script>
+</body>
+</html>
