@@ -7,7 +7,14 @@ import { LogoIcon, Wordmark } from "./brand";
 const ZIG = "polygon(0 0,100% 0,100% 70%,97% 100%,94% 70%,91% 100%,88% 70%,85% 100%,82% 70%,79% 100%,76% 70%,73% 100%,70% 70%,67% 100%,64% 70%,61% 100%,58% 70%,55% 100%,52% 70%,49% 100%,46% 70%,43% 100%,40% 70%,37% 100%,34% 70%,31% 100%,28% 70%,25% 100%,22% 70%,19% 100%,16% 70%,13% 100%,10% 70%,7% 100%,4% 70%,0 100%)";
 
 /** Our own booster pack art (no third-party artwork). */
-export function PackArt({ className = "", label = "Pitch Black", flap = true }: { className?: string; label?: string; flap?: boolean }) {
+export function PackArt({ className = "", label = "Pitch Black", flap = true, src }: { className?: string; label?: string; flap?: boolean; src?: string | null }) {
+  if (src)
+    return (
+      <div className={`pack-art relative aspect-[23/36] ${className}`}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={src} alt="Sobre de la colección" className="h-full w-full object-contain drop-shadow-[0_24px_40px_rgba(0,0,0,.55)]" draggable={false} />
+      </div>
+    );
   return (
     <div className={`pack-art relative aspect-[23/36] ${className}`}>
       <div className="absolute inset-0 overflow-hidden rounded-[14px] bg-[linear-gradient(160deg,#2a1f68_0%,#4b2fa6_45%,#8a3fb5_80%,#c24fa8_100%)] shadow-[0_24px_60px_rgba(0,0,0,.55)]">
@@ -56,6 +63,19 @@ function HitCard({ image, name }: { image?: string | null; name?: string | null 
   );
 }
 
+/** Card back shown mid-spin, before the reveal. */
+function CardBack({ src }: { src?: string | null }) {
+  if (src)
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={src} alt="" className="h-full w-full rounded-[12px] object-cover" draggable={false} />;
+  return (
+    <div className="flex h-full w-full items-center justify-center rounded-[12px] border-[7px] border-[#2b2160] bg-[radial-gradient(circle_at_50%_42%,#6a45e0,#2a1f68_55%,#1a1442)] shadow-[0_24px_60px_rgba(0,0,0,.5)]">
+      <div className="absolute inset-[10%] rounded-[50%] border-2 border-white/10" />
+      <LogoIcon size={110} className="relative w-[52%] drop-shadow-[0_6px_18px_rgba(0,0,0,.5)]" />
+    </div>
+  );
+}
+
 function Sparkle({ className, style }: { className?: string; style?: React.CSSProperties }) {
   return (
     <svg viewBox="0 0 24 24" className={`sparkle absolute ${className}`} style={style} aria-hidden="true">
@@ -73,13 +93,27 @@ const BG_PACKS = [
   { c: "right-[6%] top-[58%] w-[14%] rotate-[-12deg]", d: "40px,30px" },
 ];
 
-export default function RipPanel({ todayLabel, hitImage, hitName, setLabel }: { todayLabel?: string | null; hitImage?: string | null; hitName?: string | null; setLabel?: string }) {
+export default function RipPanel({
+  todayLabel,
+  hitImage,
+  hitName,
+  setLabel,
+  packImage,
+  cardBackImage,
+}: {
+  todayLabel?: string | null;
+  hitImage?: string | null;
+  hitName?: string | null;
+  setLabel?: string;
+  packImage?: string | null;
+  cardBackImage?: string | null;
+}) {
   const [on, setOn] = useState(false);
 
   // Touch screens have no hover: play the rip on a loop instead.
   useEffect(() => {
     if (!window.matchMedia("(hover: none)").matches) return;
-    const t = setInterval(() => setOn((v) => !v), 2800);
+    const t = setInterval(() => setOn((v) => !v), 3400);
     return () => clearInterval(t);
   }, []);
 
@@ -96,7 +130,7 @@ export default function RipPanel({ todayLabel, hitImage, hitName, setLabel }: { 
       <div className="rip-bg absolute inset-0 -z-10" aria-hidden="true" />
       {BG_PACKS.map((p, i) => (
         <div key={i} className={`bg-pack absolute ${p.c}`} style={{ "--d": p.d } as React.CSSProperties} aria-hidden="true">
-          <PackArt flap={false} label={setLabel} />
+          <PackArt flap={false} label={setLabel} src={packImage} />
         </div>
       ))}
 
@@ -111,17 +145,27 @@ export default function RipPanel({ todayLabel, hitImage, hitName, setLabel }: { 
 
       <div className="relative mx-auto flex h-[360px] max-w-[520px] items-end justify-center sm:h-[470px]">
         <div className="orb absolute top-[14%] left-1/2 h-[68%] w-[70%] -translate-x-1/2 rounded-full" aria-hidden="true" />
-        <div className="rip-pack absolute bottom-[6%] w-[170px] sm:w-[232px]">
-          <PackArt label={setLabel} />
+        {/* Sequence (from packs.com frames): pack grows → spins fast with motion blur and turns into a card back
+            → sparkles → flips to reveal the hit. One 3D element, three faces, driven by CSS keyframes. */}
+        <div className="rip-spin absolute bottom-[6%] h-[266px] w-[170px] sm:h-[362px] sm:w-[232px]">
+          <div className="face face-pack absolute inset-0">
+            <PackArt label={setLabel} src={packImage} />
+          </div>
+          <div className="face face-back absolute top-1/2 left-1/2 aspect-[63/88] w-[104%]">
+            <CardBack src={cardBackImage} />
+          </div>
+          <div className="face face-front absolute top-1/2 left-1/2 aspect-[63/88] w-[104%]">
+            <HitCard image={hitImage} name={hitName} />
+          </div>
         </div>
-        <div className="rip-card absolute bottom-[14%] w-[180px] sm:w-[226px]">
-          <HitCard image={hitImage} name={hitName} />
-          <Sparkle className="top-[-6%] left-[-14%] w-7 text-white" style={{ animationDelay: "0s" }} />
-          <Sparkle className="top-[6%] right-[-16%] w-5 text-[#ffd84f]" style={{ animationDelay: ".25s" }} />
-          <Sparkle className="top-[42%] left-[-22%] w-4 text-[#f383d6]" style={{ animationDelay: ".5s" }} />
-          <Sparkle className="bottom-[22%] right-[-20%] w-10 text-[#f3c6ff]" style={{ animationDelay: ".15s" }} />
-          <Sparkle className="bottom-[-4%] left-[-6%] w-3 text-white" style={{ animationDelay: ".4s" }} />
-          <Sparkle className="top-[-12%] right-[16%] w-3.5 text-[#5ee3ff]" style={{ animationDelay: ".65s" }} />
+        <div className="rip-sparkles pointer-events-none absolute bottom-[6%] h-[266px] w-[200px] sm:h-[362px] sm:w-[260px]" aria-hidden="true">
+          <Sparkle className="top-[-4%] left-[-10%] w-7 text-white" style={{ animationDelay: "0s" }} />
+          <Sparkle className="top-[8%] right-[-12%] w-5 text-[#ffd84f]" style={{ animationDelay: ".25s" }} />
+          <Sparkle className="top-[44%] left-[-18%] w-4 text-[#f383d6]" style={{ animationDelay: ".5s" }} />
+          <Sparkle className="bottom-[24%] right-[-16%] w-11 text-[#f3c6ff]" style={{ animationDelay: ".15s" }} />
+          <Sparkle className="bottom-[0%] left-[-4%] w-3 text-white" style={{ animationDelay: ".4s" }} />
+          <Sparkle className="top-[-10%] right-[18%] w-3.5 text-[#5ee3ff]" style={{ animationDelay: ".65s" }} />
+          <Sparkle className="top-[20%] left-[6%] w-2.5 text-white" style={{ animationDelay: ".8s" }} />
         </div>
         <span className="rip-badge absolute bottom-[-30px] left-1/2 z-10 flex h-[68px] w-[68px] -translate-x-1/2 items-center justify-center rounded-full border-[3px] border-[#3a3d58] bg-[#2a2c42] shadow-[0_10px_30px_rgba(0,0,0,.5)]">
           <LogoIcon size={40} />
